@@ -1,15 +1,17 @@
 import logging
+import time
 
 from bytefifo import byteFIFO
 from jacococlient import JacocoClient
 from helpers import bool2byte
 
-CMD_DUMP = b'\x40'
+RECV_RETRIES = 3
+RECV_WAIT    = 0.0001
 
-MAGIC_NUM = b'\xc0\xc0'
-FORMAT_VER = b'\x10\x07'
-
-BLK_HEADER = b'\x01'
+CMD_DUMP     = b'\x40'
+MAGIC_NUM    = b'\xc0\xc0'
+FORMAT_VER   = b'\x10\x07'
+BLK_HEADER   = b'\x01'
 BLK_SESSINFO = b'\x10'
 BLK_EXECDATA = b'\x11'
 
@@ -22,14 +24,15 @@ class ExecutionDataHandler():
         self.jc = jc
 
     def read_char(self):
-        ch1 = self.recv(1)
-        ch2 = self.recv(1)
+        ch = self.recv(2)
+        # ch2 = self.recv(1)
 
-        if (int(ch1[0] | ch2[0])) < 0:
+        if (int(ch[0] | ch[1])) < 0:
             raise Exception()
         #return (ch2 + ch1).decode('utf-16')
         #return ch2+ch1
-        return ch1+ch2
+        # return ch1+ch2
+        return ch
 
     def read_ushort(self):
         return int.from_bytes(self.recv(2), 'big')
@@ -56,7 +59,7 @@ class ExecutionDataHandler():
         self.session_info_visitor = visitor
 
     def read_session_info(self):
-        if hasattr(self, 'session_info_visitor'):
+        if not hasattr(self, 'session_info_visitor'):
             raise Exception("No session_info_visitor: set it.")
         id = self.read_UTF()
         start = self.read_long()
@@ -69,39 +72,59 @@ class ExecutionDataHandler():
 
     def read_block(self, block_type):
         if block_type == BLK_HEADER:
-            print("reading header")
+            logging.debug("reading header")
             self.read_header()
             return True
         elif block_type == BLK_SESSINFO:
-            print("reading ses info")
+            logging.debug("reading ses info")
             self.read_session_info()
             return True
         elif block_type == BLK_EXECDATA:
-            print("reading exec data")
+            logging.debug("reading exec data")
             self.read_execution_data()
             return True
         else:
             raise Exception(f"Unknown block type {block_type}")
 
-    def recv(self, nbytes=1):
-        logging.debug("receiving!")
-        if len(self.buf) == 0:
-            # if empty, get new buffered data from JC
+    def recv(self, nbytes):
+        retries = RECV_RETRIES
 
-            logging.debug("getting new buffered data!")
-            self.buf = self.jc.q2buf()
-            logging.debug("DONE getting new buffered data!")
+        # if the no. requested bytes is not there, retrieve
+        while len(self.buf) < nbytes:
+            newdata = self.jc.q2buf()
+            if len(newdata) > 0:
+                self.buf.put(newdata.getvalue())
+            
+            # still not enough and retries, wait
+            if len(self.buf) < nbytes and retries > 0:
+                retries -= 1
+                time.sleep(RECV_WAIT)
 
-            if len(self.buf) == 0:
-                return False
+            if retries == 0:
+                raise Exception("Data did not arrive in time!")
 
-        logging.debug(f"getting {nbytes} bytes")
+
+        # # if empty, get new buffered data from JacocoClient
+        # while len(self.buf) == 0 and retry > 0:
+        #     self.buf = self.jc.q2buf()
+
+        #     if len(self.buf) == 0:
+        #         # still empty, wait and decrease retries
+        #         time.sleep(0.1)
+        #         retry -= 1
+
+        # # it's still empty, stop
+        # if len(self.buf) == 0:
+        #     return False
+
+        # return received bytes
         return self.buf.get(nbytes)
 
     def read(self):
         while True:
             data = self.recv(1)
             if not data:
+                logging.warn("no data")
                 return False
 
             block_type = data
@@ -109,9 +132,10 @@ class ExecutionDataHandler():
                 raise Exception("Invalid execution data file.")
 
             self.first_block = False
-            if not self.read_block(block_type):
+            if self.read_block(block_type):
                 break
-
+        
+        logging.info("returning true")
         return True
 
     def visit_dump_command(self, dump: bool, reset: bool):

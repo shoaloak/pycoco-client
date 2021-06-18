@@ -19,14 +19,16 @@ def main():
     handler.set_session_info_visitor(visit_session_info)
     jc.start()
 
-    print("wait for header to arrive")
-    time.sleep(0.1)
-    handler.read()
+    # logging.info("wait for header to arrive")
+    # time.sleep(0.0000001)
+    if not handler.read():
+        raise Exception("Incomplete header")
 
-    print("sending dmp command")
+    logging.info("sending dmp command")
     handler.visit_dump_command(True, True)
-    time.sleep(0.1)
-    handler.read()
+    time.sleep(0.01)
+    if handler.read():
+        logging.info("Success")
 
     jc.runnable = False
     jc.join()

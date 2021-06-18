@@ -4,11 +4,14 @@ import select
 import socket
 import sys
 import threading
-import time
+# import time
 
 from bytefifo import byteFIFO
 
 BUF_SIZE = 4096
+
+logger = logging.getLogger('jc')
+logging.Formatter("%(name) %(message)")
 
 class JacocoClient(threading.Thread):
     def __init__(self, host, port):
@@ -39,19 +42,20 @@ class JacocoClient(threading.Thread):
                     continue
 
                 if writable and not self.sendq.empty():
-                    logging.debug("sending!")
+                    # logging.debug("sending!")
                     self.socket.sendall(self.sendq.get())
 
                 if readable:
-                    logging.debug("receiving!")
+                    # logging.debug("receiving!")
                     data = self.socket.recv(BUF_SIZE)
                     if data:
                         self.recvq.put(data)
+                        # logger.info(f"Received: {data}")
 
                 if exceptable:
-                    logging.debug("sending!")
-                    print(f"{self.socket} is exceptable")
-                    self.socket.close()
+                    # logging.debug("sending!")
+                    print(f"{exceptable[0]} is exceptable")
+                    exceptable[0].close()
                     raise Exception("s was in the exception list")
 
             except KeyboardInterrupt:
@@ -61,12 +65,9 @@ class JacocoClient(threading.Thread):
     def q2buf(self):
         buf = byteFIFO()
         while True:
-            time.sleep(0.5)
             if self.recvq.empty():
                 break
-            logging.debug("dit gaat mis?")
             buf.put(self.recvq.get())
-        logging.debug("denk het")
         return buf
 
 
