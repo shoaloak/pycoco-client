@@ -4,9 +4,10 @@ import time
 from bytefifo import byteFIFO
 from jacococlient import JacocoClient
 from helpers import bool2byte
+from datainput import read_char, read_UTF, read_long, read_bool_array
 
 RECV_RETRIES = 3
-RECV_WAIT    = 0.0001
+RECV_WAIT    = 0.01
 
 CMD_DUMP     = b'\x40'
 MAGIC_NUM    = b'\xc0\xc0'
@@ -20,55 +21,44 @@ class ExecutionDataHandler():
     def __init__(self, jc: JacocoClient):
         self.first_block = True
         self.buf = byteFIFO()
+        self.session_info_visitor = None
+        self.execution_data_visitor = None
 
         self.jc = jc
 
-    def read_char(self):
-        ch = self.recv(2)
-        # ch2 = self.recv(1)
-
-        if (int(ch[0] | ch[1])) < 0:
-            raise Exception()
-        #return (ch2 + ch1).decode('utf-16')
-        #return ch2+ch1
-        # return ch1+ch2
-        return ch
-
-    def read_ushort(self):
-        return int.from_bytes(self.recv(2), 'big')
-    
-    def read_UTF(self):
-        utflen = self.read_ushort()
-        utf_string = self.recv(utflen)
-
-        if len(utf_string) != utflen:
-            raise Exception("UTF length mismatch")
-
-        return utf_string.decode('utf-8')
-
-    def read_long(self):
-        return int.from_bytes(self.recv(8), 'big')
-
     def read_header(self):
-        if self.read_char() != MAGIC_NUM:
+        if read_char(self.recv) != MAGIC_NUM:
             raise Exception("Invalid execution data file.")
-        if self.read_char() != FORMAT_VER:
+        if read_char(self.recv) != FORMAT_VER:
             raise Exception("Incompatible version.")
 
     def set_session_info_visitor(self, visitor):
+        if not callable(visitor):
+            raise Exception(f"{visitor} is not a function.")
         self.session_info_visitor = visitor
 
+    def set_execution_data_visitor(self, visitor):
+        if not callable(visitor):
+            raise Exception(f"{visitor} is not a function.")
+        self.execution_data_visitor = visitor
+
     def read_session_info(self):
-        if not hasattr(self, 'session_info_visitor'):
-            raise Exception("No session_info_visitor: set it.")
-        id = self.read_UTF()
-        start = self.read_long()
-        dump = self.read_long()
+        if not (hasattr(self, 'session_info_visitor') or self.session_info_visitor):
+            raise Exception("No session_info_visitor set.")
+        id = read_UTF(self.recv)
+        start = read_long(self.recv)
+        dump = read_long(self.recv)
         self.session_info_visitor({'id': id, 'start':start, 'dump':dump})
 
     def read_execution_data(self):
-        #TODO
-        pass
+        if not (hasattr(self, 'execution_data_visitor') or self.execution_data_visitor):
+            raise Exception("No execution_data_visitor set.")
+        id = read_long(self.recv)
+        name = read_UTF(self.recv)
+        probes = read_bool_array(self.recv)
+        print(probes)
+        # self.execution_data_visitor({'id': id, 'name':name, 'probes':probes})
+        self.execution_data_visitor({'id': id, 'name':name})
 
     def read_block(self, block_type):
         if block_type == BLK_HEADER:
@@ -82,6 +72,7 @@ class ExecutionDataHandler():
         elif block_type == BLK_EXECDATA:
             logging.debug("reading exec data")
             self.read_execution_data()
+            logging.debug("kom ik hier?")
             return True
         else:
             raise Exception(f"Unknown block type {block_type}")
@@ -135,7 +126,6 @@ class ExecutionDataHandler():
             if self.read_block(block_type):
                 break
         
-        logging.info("returning true")
         return True
 
     def visit_dump_command(self, dump: bool, reset: bool):

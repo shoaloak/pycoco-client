@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import threading
 import time
 
 from jacococlient import JacocoClient
@@ -13,23 +14,38 @@ PORT = 6300
 def visit_session_info(info):
     print(info)
 
+def visit_execution_data(data):
+    print(data)
+
 def main():
-    jc = JacocoClient(HOST, PORT)
+    connect_event = threading.Event()
+
+    # setup client thread and the handler
+    jc = JacocoClient(connect_event, HOST, PORT)
     handler = ExecutionDataHandler(jc)
     handler.set_session_info_visitor(visit_session_info)
-    jc.start()
+    handler.set_execution_data_visitor(visit_execution_data)
 
-    # logging.info("wait for header to arrive")
-    # time.sleep(0.0000001)
+    # start thread and wait until connected
+    jc.start()
+    connect_event.wait(timeout=1)
+    if not connect_event.is_set():
+        return
+
     if not handler.read():
         raise Exception("Incomplete header")
 
     logging.info("sending dmp command")
     handler.visit_dump_command(True, True)
     time.sleep(0.01)
-    if handler.read():
-        logging.info("Success")
+    while True:
+        if handler.read():
+            break
 
+    handler.read()
+
+    # wait and close
+    time.sleep(0.1)
     jc.runnable = False
     jc.join()
     print("fin.")

@@ -4,7 +4,7 @@ import select
 import socket
 import sys
 import threading
-# import time
+import time
 
 from bytefifo import byteFIFO
 
@@ -14,10 +14,11 @@ logger = logging.getLogger('jc')
 logging.Formatter("%(name) %(message)")
 
 class JacocoClient(threading.Thread):
-    def __init__(self, host, port):
+    def __init__(self, connect_event, host, port):
         threading.Thread.__init__(self)
         self.runnable = True
 
+        self.connect_event = connect_event
         self.host = host
         self.port = port
         self.recvq = queue.Queue()
@@ -29,7 +30,13 @@ class JacocoClient(threading.Thread):
         self.socket.settimeout(0.5)
 
     def run(self):
-        self.socket.connect((self.host, self.port))
+        try:
+            self.socket.connect((self.host, self.port))
+        except:
+            logger.error("Socket connection failed")
+            sys.exit(0)
+
+        self.connect_event.set()
 
         while self.runnable:
             try:
@@ -61,6 +68,10 @@ class JacocoClient(threading.Thread):
             except KeyboardInterrupt:
                 self.socket.close()
                 break
+        
+        self.socket.shutdown(socket.SHUT_RDWR)
+        time.sleep(0.1)
+        self.socket.close()
 
     def q2buf(self):
         buf = byteFIFO()
