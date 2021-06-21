@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 import logging
+import sys
 import threading
 import time
 
 from jacococlient import JacocoClient
 from executiondatahandler import ExecutionDataHandler
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 HOST = ''
 PORT = 6300
 
 def visit_session_info(info):
+    # TODO
     print(info)
 
 def visit_execution_data(data):
-    print(data)
+    if data['name'].startswith('com.axelkoolhaas'):
+        print("BINGO!")
+        print(data['id'])
+        print(data['name'])
+        # print(data['probes'])
+
+    print(data['name'])
 
 def main():
     connect_event = threading.Event()
@@ -30,22 +38,18 @@ def main():
     jc.start()
     connect_event.wait(timeout=1)
     if not connect_event.is_set():
-        return
-
-    if not handler.read():
-        raise Exception("Incomplete header")
+        logging.error(f"Could not connect to socket {HOST}{PORT}")
+        sys.exit(-1)
 
     logging.info("sending dmp command")
     handler.visit_dump_command(True, True)
-    time.sleep(0.01)
-    while True:
-        if handler.read():
-            break
 
-    handler.read()
+    #time.sleep(0.01)
+    if not handler.read():
+        raise Exception("Incomplete header")
 
     # wait and close
-    time.sleep(0.1)
+    time.sleep(0.2)
     jc.runnable = False
     jc.join()
     print("fin.")

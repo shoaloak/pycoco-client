@@ -57,7 +57,7 @@ class JacocoClient(threading.Thread):
                     data = self.socket.recv(BUF_SIZE)
                     if data:
                         self.recvq.put(data)
-                        # logger.info(f"Received: {data}")
+                        logger.debug(f"Received: {data}")
 
                 if exceptable:
                     # logging.debug("sending!")

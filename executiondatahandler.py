@@ -7,7 +7,8 @@ from helpers import bool2byte
 from datainput import read_char, read_UTF, read_long, read_bool_array
 
 RECV_RETRIES = 3
-RECV_WAIT    = 0.01
+#RECV_WAIT    = 0.01
+RECV_WAIT    = 0.1
 
 CMD_DUMP     = b'\x40'
 MAGIC_NUM    = b'\xc0\xc0'
@@ -15,6 +16,7 @@ FORMAT_VER   = b'\x10\x07'
 BLK_HEADER   = b'\x01'
 BLK_SESSINFO = b'\x10'
 BLK_EXECDATA = b'\x11'
+BLK_END      = b' '
 
 class ExecutionDataHandler():
 
@@ -56,24 +58,23 @@ class ExecutionDataHandler():
         id = read_long(self.recv)
         name = read_UTF(self.recv)
         probes = read_bool_array(self.recv)
-        print(probes)
-        # self.execution_data_visitor({'id': id, 'name':name, 'probes':probes})
-        self.execution_data_visitor({'id': id, 'name':name})
+        self.execution_data_visitor({'id': id, 'name':name, 'probes':probes})
 
     def read_block(self, block_type):
         if block_type == BLK_HEADER:
-            logging.debug("reading header")
+            # logging.debug("receiving header")
             self.read_header()
             return True
         elif block_type == BLK_SESSINFO:
-            logging.debug("reading ses info")
+            # logging.debug("receiving ses info")
             self.read_session_info()
             return True
         elif block_type == BLK_EXECDATA:
-            logging.debug("reading exec data")
+            # logging.debug("receiving exec data")
             self.read_execution_data()
-            logging.debug("kom ik hier?")
             return True
+        elif block_type == BLK_END:
+            return False
         else:
             raise Exception(f"Unknown block type {block_type}")
 
@@ -123,7 +124,7 @@ class ExecutionDataHandler():
                 raise Exception("Invalid execution data file.")
 
             self.first_block = False
-            if self.read_block(block_type):
+            if not self.read_block(block_type):
                 break
         
         return True
