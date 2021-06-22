@@ -12,18 +12,23 @@ logging.basicConfig(level=logging.INFO)
 HOST = ''
 PORT = 6300
 
+def get_hit_count(probes):
+    count = 0
+    for probe in probes:
+        if probe:
+            count += 1
+    return count
+
 def visit_session_info(info):
-    # TODO
     print(info)
 
 def visit_execution_data(data):
-    if data['name'].startswith('com.axelkoolhaas'):
-        print("BINGO!")
-        print(data['id'])
-        print(data['name'])
-        # print(data['probes'])
-
+    # TODO configurable filter
+    # if data['name'].startswith('com.axelkoolhaas'):
+    print(data['id'])
     print(data['name'])
+    print(f"{get_hit_count(data['probes'])} of {len(data['probes'])}")
+
 
 def main():
     connect_event = threading.Event()
